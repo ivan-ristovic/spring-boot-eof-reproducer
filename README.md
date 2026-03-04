@@ -1,49 +1,85 @@
-# Issue description
+# spring-boot-eof-reproduceer
 
-`sun.nio.ch.EPoll#wait` behaves differently on JVM and SVM.
-On JVM, it returnes non-zero once per request
+## Issue summary
 
-# Reproduce steps
+Tomcat throws `EOFException` once per every request. I believe multiple executors get dispatched to process requests, and one of them always fails silently. I am not sure if this is the issue with Tomcat or Spring.
 
-Find: `org.apache.tomcat.util.net.NioEndpoint.class#run`
-The method performs `Selector.select` in a loop and processes ready keys
-Place a breakpoint at line `802`:
+Might relate to #38940 and #35126
+
+## Steps to reproduce
+
+Please use the following [repository](https://github.com/ivan-ristovic/spring-boot-eof-reproducer).
+This is a slightly modified quickstart demo from [start.spring.io](https://start.spring.io/), with Spring Boot 4.1.0, using Maven and Java 25. Dependencies include Spring Web and GraalVM Native Support.
+
+The application defines a simple _Hello world_ controller:
 ```java
-Iterator<SelectionKey> iterator = this.keyCount > 0 ? this.selector.selectedKeys().iterator() : null;
+package com.example.demo;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+@SpringBootApplication
+public class DemoApplication {
+
+	@RequestMapping("/")
+	String home() {
+		return "Hello World!";
+	}
+
+	public static void main(String[] args) {
+		SpringApplication.run(DemoApplication.class, args);
+	}
+
+}
 ```
-The breakpoint will be hit approximately once per second (as that is the select timeout)
-You can use a conditional breakpoint `this.keyCount > 0`
-Send a request
 
-## JVM
-
-Observe `keyCount == 1`, the key is processed regularly and the response is returned.
-In the next iteration, `keyCount == 0`
-
-## SVM
-
-Debug with gdb, notable breakpoint:
+1. Build the demo (a convenience `build_jvm` script is provided):
 ```bash
-b org.apache.tomcat.util.net.NioEndpoint$Poller::run`
+$ ./build_jvm
 ```
-
-Observe same behavior as JVM, `keyCount == 1`, the key is processed regularly.
-However, in the next iteration, `Selector.select()` returns `1` again so `keyCount == 1`
-The loop after line `802` attempts to process the key again, and dispatches a worker
-The worker throws an exception after attempting to read the socket, and the exception gets discarded silently.
-
-Exception thrown at:
+or manually:
 ```bash
-#0  org.apache.tomcat.util.net.NioEndpoint$NioSocketWrapper::fillReadBuffer(NioEndpoint.java:1339)
-    (this=org.apache.tomcat.util.net.NioEndpoint$NioSocketWrapper = {...}, block=false, buffer=java.nio.HeapByteBuffer = {...}) at org/apache/tomcat/util/net/NioEndpoint.java:1339
-#1  0x0000555556764326 in org.apache.tomcat.util.net.NioEndpoint$NioSocketWrapper::read(NioEndpoint.java:1223)
-    (this=org.apache.tomcat.util.net.NioEndpoint$NioSocketWrapper = {...}, block=false, to=java.nio.HeapByteBuffer = {...}) at org/apache/tomcat/util/net/NioEndpoint.java:1223
-#2  0x00005555566203de in org.apache.coyote.http11.Http11InputBuffer::fill(Http11InputBuffer.java:776)
-    (this=org.apache.coyote.http11.Http11InputBuffer = {...}, block=false)
-    at org/apache/coyote/http11/Http11InputBuffer.java:776
-#3  0x00005555566215c6 in org.apache.coyote.http11.Http11InputBuffer::parseRequestLine(Http11InputBuffer.java:334)
-    (this=org.apache.coyote.http11.Http11InputBuffer = {...}, keptAlive=false, connectionTimeout=60000, keepAliveTimeout=60000) at org/apache/coyote/http11/Http11InputBuffer.java:334
-#4  0x000055555662c651 in org.apache.coyote.http11.Http11Processor::service(Http11Processor.java:270)
-    (this=org.apache.coyote.http11.Http11Processor = {...}, socketWrapper=org.apache.tomcat.util.net.NioEndpoint$NioSocketWrapper = {...}) at org/apache/coyote/http11/Http11Processor.java:270
+$ ./mvnw package
 ```
+1. Run the demo with logging enabled (a convenience `run_jvm` script is provided):
+```bash
+$ ./run_jvm
+```
+or manually:
+```bash
+$ ./mvnw spring-boot:run -Dspring-boot.run.jvmArguments="-Dlogging.level.root=TRACE"
+```
+1. Send a request (a convenience `send_request` script is provided):
+```bash
+$ ./send_request
+```
+or manually:
+```bash
+$ curl $@ localhost:8080
+```
+1. Observe the following exception trace:
+```java
+java.io.EOFException
+	at org.apache.tomcat.util.net.NioEndpoint$NioSocketWrapper.fillReadBuffer(NioEndpoint.java:1339) ~[tomcat-embed-core-11.0.18.jar:11.0.18]
+	at org.apache.tomcat.util.net.NioEndpoint$NioSocketWrapper.read(NioEndpoint.java:1223) ~[tomcat-embed-core-11.0.18.jar:11.0.18]
+	at org.apache.coyote.http11.Http11InputBuffer.fill(Http11InputBuffer.java:776) ~[tomcat-embed-core-11.0.18.jar:11.0.18]
+	at org.apache.coyote.http11.Http11InputBuffer.parseRequestLine(Http11InputBuffer.java:334) ~[tomcat-embed-core-11.0.18.jar:11.0.18]
+	at org.apache.coyote.http11.Http11Processor.service(Http11Processor.java:270) ~[tomcat-embed-core-11.0.18.jar:11.0.18]
+	at org.apache.coyote.AbstractProcessorLight.process(AbstractProcessorLight.java:63) ~[tomcat-embed-core-11.0.18.jar:11.0.18]
+	at org.apache.coyote.AbstractProtocol$ConnectionHandler.process(AbstractProtocol.java:903) ~[tomcat-embed-core-11.0.18.jar:11.0.18]
+	at org.apache.tomcat.util.net.NioEndpoint$SocketProcessor.doRun(NioEndpoint.java:1779) ~[tomcat-embed-core-11.0.18.jar:11.0.18]
+	at org.apache.tomcat.util.net.SocketProcessorBase.run(SocketProcessorBase.java:52) ~[tomcat-embed-core-11.0.18.jar:11.0.18]
+	at org.apache.tomcat.util.threads.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:946) ~[tomcat-embed-core-11.0.18.jar:11.0.18]
+	at org.apache.tomcat.util.threads.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:480) ~[tomcat-embed-core-11.0.18.jar:11.0.18]
+	at org.apache.tomcat.util.threads.TaskThread$WrappingRunnable.run(TaskThread.java:57) ~[tomcat-embed-core-11.0.18.jar:11.0.18]
+	at java.base/java.lang.Thread.run(Thread.java:1474) ~[na:na]
+```
+
+I have also included convenience scripts that exercise the same behavior on GraalVM (`build_svm` and `run_svm` scripts). You will need to provide a GraalVM installation using the `GRAALVM_HOME` environment variable.
+
+## Hardwaare details
+
+I have been able to reproduce on both AMD and x64 architectures, on Linux systems (Debian 13 and Arch .
 

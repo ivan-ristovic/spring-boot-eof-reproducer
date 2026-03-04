@@ -1,3 +1,3 @@
 #!/bin/bash
 
-./target/demo
+./target/demo -Dlogging.level.root=TRACE
