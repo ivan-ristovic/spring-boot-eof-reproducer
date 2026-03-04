@@ -79,7 +79,7 @@ java.io.EOFException
 
 I have also included convenience scripts that exercise the same behavior on GraalVM (`build_svm` and `run_svm` scripts). You will need to provide a GraalVM installation using the `GRAALVM_HOME` environment variable.
 
-## Hardwaare details
+## Hardware details
 
-I have been able to reproduce on both AMD and x64 architectures, on Linux systems (Debian 13 and Arch .
+I have been able to reproduce on both AMD and x64 architectures, on Linux systems (Debian 13 and Arch 2025.03 release with kernel 6.12.73.)
 
