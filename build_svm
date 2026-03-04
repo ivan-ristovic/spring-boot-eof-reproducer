@@ -1,0 +1,11 @@
+#!/bin/bash
+
+if [ ! -d "$GRAALVM_HOME" ]; then
+    echo "GRAALVM_HOME invalid"
+    exit 1
+fi
+
+set -xe;
+
+export NATIVE_IMAGE_OPTIONS="-g -O0"
+./mvnw -Pnative native:compile
