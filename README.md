@@ -57,7 +57,7 @@ $ ./send_request
 ```
 or manually:
 ```bash
-$ curl $@ localhost:8080
+$ curl localhost:8080
 ```
 1. Observe the following exception trace:
 ```java
