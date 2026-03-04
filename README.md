@@ -43,7 +43,7 @@ or manually:
 ```bash
 $ ./mvnw package
 ```
-1. Run the demo with logging enabled (a convenience `run_jvm` script is provided):
+2. Run the demo with logging enabled (a convenience `run_jvm` script is provided):
 ```bash
 $ ./run_jvm
 ```
@@ -51,7 +51,7 @@ or manually:
 ```bash
 $ ./mvnw spring-boot:run -Dspring-boot.run.jvmArguments="-Dlogging.level.root=TRACE"
 ```
-1. Send a request (a convenience `send_request` script is provided):
+3. Send a request (a convenience `send_request` script is provided):
 ```bash
 $ ./send_request
 ```
@@ -59,7 +59,7 @@ or manually:
 ```bash
 $ curl localhost:8080
 ```
-1. Observe the following exception trace:
+4. Observe the following exception trace:
 ```java
 java.io.EOFException
 	at org.apache.tomcat.util.net.NioEndpoint$NioSocketWrapper.fillReadBuffer(NioEndpoint.java:1339) ~[tomcat-embed-core-11.0.18.jar:11.0.18]
